@@ -204,24 +204,24 @@ fn main() {
                     .wheats_accepted
                     .into_iter()
                     .map(|(wheat, passed)| {
-                        GradescopeTestReport::new(
-                            wheat.file_name().unwrap().to_string_lossy().to_string(),
-                            if passed { 1 } else { 0 },
-                            1,
-                            "Passed wheat".to_owned(),
-                        )
+                        let (score, message) = if passed {
+                            (1, "Passed wheat!")
+                        } else {
+                            (0, "Failed wheat")
+                        };
+                        GradescopeTestReport::new(wheat.name(), score, 1, message.to_owned())
                     });
             let chaff_test_reports =
                 test_suite_evaluation
                     .chaffs_rejected
                     .into_iter()
                     .map(|(chaff, caught)| {
-                        GradescopeTestReport::new(
-                            chaff.file_name().unwrap().to_string_lossy().to_string(),
-                            if caught { 1 } else { 0 },
-                            1,
-                            "Caught chaff".to_owned(),
-                        )
+                        let (score, message) = if caught {
+                            (1, "Caught chaff!")
+                        } else {
+                            (0, "Didn't catch chaff")
+                        };
+                        GradescopeTestReport::new(chaff.name(), score, 1, message.to_owned())
                     });
 
             let functionality_reports = test_results.into_iter().flat_map(|result| {
@@ -229,12 +229,12 @@ fn main() {
                     (_, Ok(block_results)) => block_results
                         .into_iter()
                         .map(|(block_name, passed, total)| {
-                            GradescopeTestReport::new(
-                                block_name,
-                                passed,
-                                total,
-                                "Tests passed!".to_owned(),
-                            )
+                            let message = if passed < total {
+                                format!("Missing {} tests in this block", total - passed)
+                            } else {
+                                format!("Passed all {} tests in this block!", passed)
+                            };
+                            GradescopeTestReport::new(block_name, passed, total, message)
                         })
                         .collect::<Vec<_>>()
                         .into_iter(),

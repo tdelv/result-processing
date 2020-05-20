@@ -30,6 +30,9 @@ impl Implementation {
     pub fn is_chaff(&self) -> bool {
         self.to_string_lossy().contains("chaff")
     }
+    pub fn name(&self) -> String {
+        self.file_name().unwrap().to_string_lossy().to_string()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
