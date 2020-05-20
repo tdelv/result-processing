@@ -113,21 +113,36 @@ function generate_functionality_report(test_result: Evaluation): GradescopeTestR
 
     let block: TestBlock;
     for (block of result.Ok) {
-        let total_tests: number = block.tests.length;
-        let passed_tests: number = block.tests.filter(test => test.passed).length;
-        reports.push({
-                "name": block.name,
-                "score": passed_tests,
-                "max_score": total_tests,
-                "output": passed_tests === total_tests 
-                    ? `Passed all ${total_tests} tests in this block!`
-                    : `Missing ${total_tests - passed_tests} tests in this block`,
-                "visibility": "after_published"
-            })
+        let report: GradescopeTestReport;
+        if (block.error) {
+            report = {
+                    "name": block.name,
+                    "score": 0,
+                    "max_score": 1,
+                    "output": "Block errored.",
+                    "visibility": "after_published"
+                };
+        } else {
+            let total_tests: number = block.tests.length;
+            let passed_tests: number = block.tests.filter(test => test.passed).length;
+            report = {
+                    "name": block.name,
+                    "score": passed_tests === total_tests ? 1 : 0,
+                    "max_score": 1,
+                    "output": passed_tests === total_tests 
+                        ? `Passed all ${total_tests} tests in this block!`
+                        : `Missing ${total_tests - passed_tests} tests in this block`,
+                    "visibility": "after_published"
+                };
+        }
+
+        reports.push(report);
     }
 
     return reports;
 }
+
+
 
 function generate_wheat_report(wheat_result: Evaluation): GradescopeTestReport {
     let result: Result = wheat_result.result;
