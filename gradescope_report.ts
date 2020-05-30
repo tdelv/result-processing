@@ -3,11 +3,9 @@
 ***** Data Types *****
 \********************/
 
+// Input data types
+
 type PathName = string;
-
-type Implementation = PathName;
-
-type TestSuite = PathName;
 
 interface Test {
     loc: string;
@@ -31,12 +29,12 @@ enum Err {
 
 interface Result {
     Ok?: TestBlock[],
-    Err?: string
+    Err?: Err
 }
 
 interface Evaluation {
-    code: Implementation;
-    tests: TestSuite;
+    code: PathName;
+    tests: PathName;
     result: Result;
 }
 
@@ -71,8 +69,11 @@ interface GradescopeTestReport {
 *** Handling input ***
 \********************/
 
+/*
+    Parse command line arguments
+    Outputs: The file locations of `[infile, outfile, scorefile]`
+*/
 function parse_command_line(): [string, string, string] {
-    // Parse command line arguments
     let args: string[] = process.argv.slice(2);
 
     if (args.length != 3) {
@@ -82,12 +83,22 @@ function parse_command_line(): [string, string, string] {
     return [args[0], args[1], args[2]];
 }
 
+/*
+    Read raw evaluation data from JSON file
+    Inputs: The `path` to the evaluation file
+    Outputs: List of evaluations present in file
+*/
 function read_evaluation_from_file(path: PathName): Evaluation[] {
     let fs = require('fs');
     let contents: string = fs.readFileSync(path);
     return JSON.parse(contents);
 }
 
+/*
+    Splits the evaluations into functionality, wheats, and chaffs
+    Inputs: The list of `results` to be split
+    Outputs: The `[test_results, wheat_results, chaff_results]`
+*/
 function partition_results(results: Evaluation[]): [Evaluation[], Evaluation[], Evaluation[]] {
     let test_results: Evaluation[] = [],
         wheat_results: Evaluation[] = [],
@@ -109,6 +120,11 @@ function partition_results(results: Evaluation[]): [Evaluation[], Evaluation[], 
     return [test_results, wheat_results, chaff_results];
 }
 
+/*
+    Read scoring data from JSON file
+    Inputs: The `path` to the score file
+    Outputs: Object containing the scoring data
+*/
 function read_score_data_from_file(path: PathName): PointData {
     let fs = require('fs');
     let contents: string = fs.readFileSync(path);
@@ -124,6 +140,11 @@ function read_score_data_from_file(path: PathName): PointData {
 *** Handling output ***
 \*********************/
 
+/*
+    Writes a Gradescope report to a file
+    Inputs: The `path` to the output file;
+            The `report` to be written
+*/
 function write_report_to_file(path: PathName, report: GradescopeReport) {
     let fs = require('fs');
     let data: string = JSON.stringify(report);
@@ -137,13 +158,25 @@ function write_report_to_file(path: PathName, report: GradescopeReport) {
 
 //// Helpers
 
-// Gets the name a file from path
+/*
+    Gets the name a file from path name
+    Inputs: The `path_name` of the file
+    Outputs: The name of the file
+*/
 function get_file_name(path_name: PathName): string {
     let path = require('path');
     return path.parse(path_name).base;
 }
 
-// Gets the name of a test or block from a location
+/*
+    Gets the pure location of a test or test block from a full location name
+    E.g.: "file:///autograder/results/docdiff-wheat-2017.arr;docdiff-tests.arr/tests.arr:8:0-19:3"
+          --> "tests.arr:8:0-19:3"
+    Used to uniquely identify tests/test blocks between evaluations
+
+    Inputs: The full location name
+    Outputs: The pure location name
+*/
 function get_loc_name(loc: string): string {
     return loc.split("/")[-1];
 }
@@ -151,10 +184,18 @@ function get_loc_name(loc: string): string {
 
 // Generate student reports
 
+/*
+    Generates a functionality report(s); 
+    If test file errors, returns a single report with 0/1 and error;
+    Otherwise, return report for each block, each out of 1
+
+    Inputs: The `test_result` of a single test suite
+    Outputs: A list of reports for each block
+*/
 function generate_functionality_report(test_result: Evaluation): GradescopeTestReport[] {
-    // If errors, 0 functionality and provide error reason
     let result: Result = test_result.result;
 
+    // If errors, 0 functionality and provide error reason
     if (result.Err) {
         return [{
                 name: get_file_name(test_result.code),
@@ -203,6 +244,16 @@ function generate_functionality_report(test_result: Evaluation): GradescopeTestR
     return reports;
 }
 
+/*
+    Takes a wheat evaluation, and finds all of the invalid tests and blocks;
+    If the wheat passes, returns null;
+    Otherwise, returns the pure locations of all invalid tests/blocks and 
+                       the name of the block it contains/itself
+
+    Inputs: The `wheat` evaluation
+    Outputs: null if valid wheat, otherwise the invalid tests/blocks as:
+             [list of (test location, block name), list of (block location, block name)]
+*/
 function get_invalid_tests_and_blocks(wheat: Evaluation): [[string, string][], [string, string][]] | null {
     if (wheat.result.Err) {
         return [[],[]];
@@ -228,26 +279,40 @@ function get_invalid_tests_and_blocks(wheat: Evaluation): [[string, string][], [
     }
 
     if ((invalid_tests.length === 0) && (invalid_blocks.length === 0)) {
+        // This means the wheat is valid
         return null;
     } else {
         return [invalid_tests, invalid_blocks];
     }
 }
 
+/*
+    Generates a wheat testing report; 
+    If the wheat is invalid, generates report with reason;
+    Otherwise, generates report with positive message
+
+    Inputs: The `wheat_result` evaluation
+    Outputs: A report for the wheat
+*/
 function generate_wheat_report(wheat_result: Evaluation): GradescopeTestReport {
+    // Find the invalid tests/blocks
     let invalid: [[string, string][], [string, string][]] | null = 
         get_invalid_tests_and_blocks(wheat_result);
 
     let output: string;
     if (invalid === null) {
+        // Valid wheat
         output = "Passed wheat!";
     } else if (wheat_result.result.Err) {
+        // Test file errored
         output = `Wheat errored; ${wheat_result.result.Err}`;
     } else {
         let [invalid_tests, invalid_blocks] = invalid;
         if (invalid_tests.length > 0) {
+            // Invalid test
             output = `Wheat failed test in block ${invalid_tests[0][1]}`;
         } else if (invalid_blocks.length > 0) {
+            // Block errored
             output = `Wheat caused error in block ${invalid_blocks[0][1]}`;
         } else {
             throw "Wheat failed but no reason given.";
@@ -263,10 +328,21 @@ function generate_wheat_report(wheat_result: Evaluation): GradescopeTestReport {
         }
 }
 
+/*
+    A curried function which generates a chaff testing report;
+    It first takes in the list of wheat evaluations, and finds all
+        invalid tests and test blocks between wheats;
+    It then takes in a chaff evaluation, and checks if it is caught
+        by the valid tests/blocks
+
+    Inputs: The `wheat_results` evaluations
+    Outputs: A function which generates a chaff report from an evaluation
+*/
 function generate_chaff_report(wheat_results: Evaluation[]) {
     let all_invalid_tests: Set<string> = new Set(),
         all_invalid_blocks: Set<string> = new Set();
 
+    // Go through wheats and find invalid tests/blocks
     let wheat_result: Evaluation;
     for (wheat_result of wheat_results) {
         let invalid: [[string, string][], [string, string][]] | null =
@@ -285,8 +361,17 @@ function generate_chaff_report(wheat_results: Evaluation[]) {
         }
     }
 
+    /*
+        Generates a chaff testing report; ignores invalid tests/blocks;
+        If the chaff is invalid, generates report with reason;
+        Otherwise, generates report with negative message
+
+        Inputs: The `chaff_results` to report
+        Outputs: The report for the chaff
+    */
     return function (chaff_result: Evaluation): GradescopeTestReport {
         if (chaff_result.result.Err) {
+            // Test file errors
             return {
                     name: get_file_name(chaff_result.code),
                     score: 1,
@@ -295,9 +380,11 @@ function generate_chaff_report(wheat_results: Evaluation[]) {
                     visibility: "after_published"
                 };
         } else {
+            // Loop through blocks to check if chaff is caught
             let block: TestBlock;
             for (block of chaff_result.result.Ok) {
-                if (block.error) {
+                if (block.error && !all_invalid_blocks.has(get_loc_name(block.loc))) {
+                    // Block errors
                     return {
                             name: get_file_name(chaff_result.code),
                             score: 1,
@@ -309,7 +396,8 @@ function generate_chaff_report(wheat_results: Evaluation[]) {
 
                 let test: Test;
                 for (test of block.tests) {
-                    if (!test.passed) {
+                    // Test fails
+                    if (!test.passed && !all_invalid_tests.has(get_loc_name(test.loc))) {
                         return {
                                 name: get_file_name(chaff_result.code),
                                 score: 1,
@@ -321,6 +409,7 @@ function generate_chaff_report(wheat_results: Evaluation[]) {
                 }
             }
 
+            // If this is reached, the chaff is not caught
             return {
                     name: get_file_name(chaff_result.code),
                     score: 0,
@@ -332,12 +421,22 @@ function generate_chaff_report(wheat_results: Evaluation[]) {
     }
 }
 
+
 // Generate TA reports
 
+/*
+    Generates a score report for a given list of reports
+
+    Inputs: The `reports` to summarize;
+            The `point_values` to apply to the reports;
+            The `name` to use in the report
+*/
 function generate_score_report(
         reports: GradescopeTestReport[],
         point_values: Map<string, number>,
         name: string): GradescopeTestReport {
+
+    // Find the score summary from the reports
     let total_score: number = 0,
         possible_score: number = 0;
 
@@ -349,6 +448,7 @@ function generate_score_report(
         possible_score += points;
     }
 
+    // Return report
     return {
             name: name,
             score: total_score,
@@ -360,6 +460,11 @@ function generate_score_report(
 
 // Generate overall report
 
+/*
+    Generates the overall report from all provided reports
+    Inputs: List of `all_reports` to include
+    Outputs: The overall Gradescope report
+*/
 function generate_overall_report(
         all_reports: GradescopeTestReport[]): GradescopeReport {
     return {
@@ -368,6 +473,7 @@ function generate_overall_report(
             tests: all_reports,
         };
 }
+
 
 function main() {
 
