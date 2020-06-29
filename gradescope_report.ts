@@ -129,9 +129,23 @@ function read_score_data_from_file(path: PathName): PointData {
     let fs = require('fs');
     let contents: string = fs.readFileSync(path);
     let raw_score_data = JSON.parse(contents);
+
+    function json_to_map(obj): Map<string, number> {
+        let map: Map<string, number> = new Map();
+        let name: string;
+        for (name in obj) {
+            map.set(name, obj[name]);
+        }
+
+        return map;
+    }
+
+    let functionality_map: Map<string, number> = json_to_map(raw_score_data.functionality);
+    let testing_map: Map<string, number> = json_to_map(raw_score_data.testing);
+
     return {
-            functionality: new Map(raw_score_data.functionality),
-            testing: new Map(raw_score_data.testing)
+            functionality: functionality_map,
+            testing: testing_map
         };
 }
 
